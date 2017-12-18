@@ -1,0 +1,196 @@
+use std::io::Stdout;
+
+use ast::*;
+use error;
+use error::{FileLocation, SourceInfo, Error};
+use error::ErrorKind::*;
+// use state::Bindings;
+
+
+grammar(locals: &mut LocalBindings, globals: &mut Bindings, source: &SourceInfo, err_dest: &Stdout);
+
+
+// pub FormulaSchema: FormulaSchema = {
+//     "schema" <var:Ident> "::" <mtype:MetaType> "." <exp:FormulaSchema> => FormulaSchema::Schema(var, mtype, Box::new(exp)),
+//     <form:Formula>                                                     => FormulaSchema::Formula(form),
+// };
+
+
+// pub ProofRules: Formula = {
+//     "given" <var:Ident> ":" <itype:InternalType> "." <form:ProofRules> => Formula::UniversalQ(var, itype, Box::new(form)),
+//     "contrapositive" "." <form:ProofRules>                             => form.contrapositive(),
+//     <form:ProofRules> <term:Term>                                      => form.instantiate(term),
+//     <form:ProofRulesSchemaSpec>                                        => form.formula(),
+// };
+
+// pub ProofRulesSchemaSpec: FormulaSchema = {
+//     <formsch:ProofRulesSchemaSpec> <arg:ProofRulesBase> => formsch.specify(arg),
+//     <formsch:ProofRulesBase>                            => formsch,
+// };
+
+// pub ProofRulesBase: FormulaSchema = {
+//     <id:Ident> => 
+// };
+
+
+// CommaSepNoValue<T>: () = {
+//     <expr:T> "," <exprs:CommaSepNoValue<T>> => (),
+//     <expr:T>                                => (),
+// }
+
+
+pub Program: () = {
+    <stmts:StatementOrComment*> => (),
+};
+
+
+pub StatementOrComment: () = {
+    <stmt:Statement> => (),
+    <cmt:Comment>    => (),
+};
+
+
+pub Statement: () = {
+    <loc:Loc> "let" <typedec:MTypeDec>              => {
+        match typedec {
+            Ok((var, mtype)) => {
+                if let Err(error) = globals.insert_object_noval(var, mtype, &loc) {
+                    error.to_console(&mut err_dest.lock(), source);
+                }
+            },
+            Err(error)       => { error.to_console(&mut err_dest.lock(), source); },
+        }
+    },
+    <loc:Loc> "axiom" <var:Ident> "=" <sch:FSchema> => {
+        match sch {
+            Ok(schema) => {
+                if schema.is_wff_schema() {
+                    if let Err(error) = globals.insert_theorem(var, schema.value(), &loc) {
+                        error.to_console(&mut err_dest.lock(), source);
+                    }
+                } else {
+                    Error::new(UnboundTheorem, &loc).to_console(&mut err_dest.lock(), source);
+                }
+            },
+            Err(error) => {
+                error.to_console(&mut err_dest.lock(), source);
+            },
+        }
+    },
+};
+
+
+pub FSchema: error::Result<FSchemaBuilder> = {
+    <loc:Loc> "schema" <typedec:MTypeDecSchema> "." <sch:FSchema> => {
+        let (var, mtype) = typedec?;
+        FSchemaBuilder::schema(var, mtype, sch?, locals, loc)
+    },
+    <form:Formula>                                                => FSchemaBuilder::formula(form?),
+};
+
+
+pub MTypeDecSchema: error::Result<(usize, MetaType)> = {
+    <loc:Loc> <typedec:MTypeDec> => {
+        let (var, mtype) = typedec?;
+        FSchemaBuilder::schema_prep(var, mtype.clone(), locals, globals, loc)?;
+        Ok((var, mtype))
+    },
+};
+
+
+pub MTypeDec: error::Result<(usize, MetaType)> = {
+    <var:Ident> "::" <mtype:MetaType> => Ok((var, mtype?)),
+};
+
+
+pub Formula: error::Result<FormulaBuilder> = {
+    <loc:Loc> "forall" <typedec:ITypeDec> "." <form:Formula> => {
+        let (var, itype) = typedec?;
+        FormulaBuilder::universal_q(var, itype, form?, locals, loc)
+    },
+    // "exists" <var:Ident> ":" <itype:InternalType> "." <form:Formula> => Formula::ExistentialQ(var, itype, Box::new(form)),
+    <form:FormulaNoQ>                                        => form,
+};
+
+pub FormulaNoQ: error::Result<FormulaBuilder> = {
+    <lhs:FormulaApp> "->" <rhs:Formula> => FormulaBuilder::implication(lhs?, rhs?),
+    <form:FormulaApp>                   => form,
+};
+
+pub FormulaApp: error::Result<FormulaBuilder> = {
+    <pred:FormulaApp> <term:TermVar> => FormulaBuilder::application(pred?, term?, globals),
+    <form:FormulaBase>               => form,
+};
+
+pub FormulaBase: error::Result<FormulaBuilder> = {
+    "(" <form:Formula> ")" => form,
+    <loc:Loc> "false"      => FormulaBuilder::false_(loc),
+    <loc:Loc> <id:Ident>   => FormulaBuilder::relation(id, locals, globals, loc),
+};
+
+
+pub ITypeDec: error::Result<(usize, InternalType)> = {
+    <loc:Loc> <var:Ident> ":" <itype:InternalType> => {
+        let itype_unwrapped = itype?;
+        FormulaBuilder::quantifier_prep(var, itype_unwrapped.clone(), locals, globals, loc)?;
+        Ok((var, itype_unwrapped))
+    },
+};
+
+
+pub Term: error::Result<TermBuilder> = {
+    <func:Term> <arg:TermVar> => TermBuilder::application(func?, arg?, globals),
+    <term:TermVar>            => term,
+};
+
+pub TermVar: error::Result<TermBuilder> = {
+    "(" <term:Term> ")"  => term,
+    <loc:Loc> <id:Ident> => TermBuilder::symbol(id, locals, globals, loc),
+};
+
+
+pub MetaType: error::Result<MetaType> = {
+    "Type"                       => Ok(MetaType::Type),
+    "Term" <itype:InternalType>  => Ok(MetaType::Term(itype?)),
+    "Formula" <itypes:MetaFSpec> => Ok(MetaType::Formula(itypes?)),
+};
+
+pub MetaFSpec: error::Result<Vec<InternalType>> = {
+    <itype:InternalType> <itypes:MetaFSpec> => {
+        let mut itypes = itypes?;
+        itypes.push(itype?);
+        Ok(itypes)
+    },
+    <itype:InternalType>                    => Ok(vec![itype?]),
+};
+
+
+pub InternalType: error::Result<InternalType> = {
+    <arg:InternalTypePre> "->" <res:InternalType> => Ok(InternalType::Func(Box::new(arg?), Box::new(res?))),
+    <itype:InternalTypePre>                       => itype,
+};
+
+
+pub InternalTypePre: error::Result<InternalType> = {
+    "(" <itype:InternalType> ")" => itype,
+    <loc:Loc> <id:Ident>         => {
+        if let Some(local_id) = locals.get_local(&id) {
+            Ok(InternalType::Named(Local(local_id)))
+        } else if let Some(MetaType::Type) = globals.get_type(&id) {
+            Ok(InternalType::Named(Global(id)))
+        } else {
+            Err(Error::new(NoBinding {
+                name: globals.get_name(&id).unwrap().clone(),
+            }, &loc))
+        }
+    },
+};
+
+
+pub Loc: FileLocation = {
+    <@L> => source.to_file_location(<>)
+};
+
+
+Comment: () = r";.*" => ();
+Ident: usize = r"[^. \n\r\t():;]*" => globals.get_id(<>);
