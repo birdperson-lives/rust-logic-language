@@ -2,14 +2,30 @@
 
 use std::boxed::Box;
 // use std::cmp::{PartialEq, Eq};
-// use std::collections::HashSet;
+use std::collections::HashMap;
 // use std::fmt;
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Ident {
-    Local(usize),
     Global(usize),
+    Local(usize),
+}
+
+impl Ident {
+    fn matches(self, other: Ident, assoc_sto: &mut HashMap<usize, usize>, assoc_ots: &mut HashMap<usize, usize>) -> bool {
+        match self {
+            Ident::Global(id)      => if let Ident::Global(id_) = other { id == id_ } else { false },
+            Ident::Local(local_id) => {
+                if let Ident::Local(local_id_) = other {
+                    *assoc_sto.entry(local_id).or_insert(local_id_) == local_id_ &&
+                        *assoc_ots.entry(local_id_).or_insert(local_id) == local_id
+                } else {
+                    false
+                }
+            },
+        }
+    }
 }
 
 
@@ -63,6 +79,25 @@ impl Term {
     //         // _                                     => HashSet::new(),
     //     }
     // }
+
+    fn matches(&self, other: &Term, assoc_sto: &mut HashMap<usize, usize>, assoc_ots: &mut HashMap<usize, usize>) -> bool {
+        match self {
+            &Term::Symbol(id)                             => {
+                if let &Term::Symbol(id_) = other {
+                    Ident::matches(id, id_, assoc_sto, assoc_ots)
+                } else {
+                    false
+                }
+            },
+            &Term::Application(box ref func, box ref arg) => {
+                if let &Term::Application(box ref func_, box ref arg_) = other {
+                    Term::matches(func, func_, assoc_sto, assoc_ots) && Term::matches(arg, arg_, assoc_sto, assoc_ots)
+                } else {
+                    false
+                }
+            },
+        }
+    }
 }
 
 
@@ -77,17 +112,17 @@ pub enum Formula {
 }
 
 impl Formula {
-    pub fn negate(self) -> Formula {
-        Formula::Implication(Box::new(self), Box::new(Formula::False))
-    }
+    // pub fn negate(self) -> Formula {
+    //     Formula::Implication(Box::new(self), Box::new(Formula::False))
+    // }
 
-    pub fn contrapositive(self) -> Formula {
-        if let Formula::Implication(box lhs, box rhs) = self {
-            Formula::Implication(Box::new(rhs.negate()), Box::new(lhs.negate()))
-        } else {
-            panic!("Cannot take contrapositive of {:?} : not an implication", self);
-        }
-    }
+    // pub fn contrapositive(self) -> Formula {
+    //     if let Formula::Implication(box lhs, box rhs) = self {
+    //         Formula::Implication(Box::new(rhs.negate()), Box::new(lhs.negate()))
+    //     } else {
+    //         panic!("Cannot take contrapositive of {:?} : not an implication", self);
+    //     }
+    // }
 
     pub fn instantiate(self, term: Term) -> Formula {
         if let Formula::UniversalQ(var, _itype, box form) = self {
@@ -97,7 +132,7 @@ impl Formula {
         }
     }
 
-    fn substitute(self, var: usize, term: &Term) -> Formula {
+    pub fn substitute(self, var: usize, term: &Term) -> Formula {
         match self {
             Formula::False                           => Formula::False,
             Formula::Relation(id)                    => Formula::Relation(id),
@@ -108,6 +143,45 @@ impl Formula {
                     Formula::UniversalQ(id, itype, Box::new(form))
                 } else {
                     Formula::UniversalQ(id, itype, Box::new(form.substitute(var, term)))
+                }
+            },
+        }
+    }
+
+    pub fn matches(&self, other: &Formula, assoc_sto: &mut HashMap<usize, usize>, assoc_ots: &mut HashMap<usize, usize>) -> bool {
+        match self {
+            &Formula::False                                   => if let &Formula::False = other { true } else { false },
+            &Formula::Relation(id)                            => {
+                if let &Formula::Relation(id_) = other {
+                    Ident::matches(id, id_, assoc_sto, assoc_ots)
+                } else {
+                    false
+                }
+            },
+            &Formula::Application(box ref pred, ref arg)      => {
+                if let &Formula::Application(box ref pred_, ref arg_) = other {
+                    Formula::matches(pred, pred_, assoc_sto, assoc_ots) && Term::matches(arg, arg_, assoc_sto, assoc_ots)
+                } else {
+                    false
+                }
+            },
+            &Formula::Implication(box ref lhs, box ref rhs)   => {
+                if let &Formula::Implication(box ref lhs_, box ref rhs_) = other {
+                    Formula::matches(lhs, lhs_, assoc_sto, assoc_ots) && Formula::matches(rhs, rhs_, assoc_sto, assoc_ots)
+                } else {
+                    false
+                }
+            },
+            &Formula::UniversalQ(id, ref itype, box ref form) => {
+                if let &Formula::UniversalQ(id_, ref itype_, box ref form_) = other {
+                    assoc_sto.insert(id, id_);
+                    assoc_ots.insert(id_, id);
+                    let answer = itype == itype_ && Formula::matches(form, form_, assoc_sto, assoc_ots);
+                    assoc_sto.remove(&id);
+                    assoc_ots.remove(&id_);
+                    answer
+                } else {
+                    false
                 }
             },
         }

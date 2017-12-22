@@ -219,11 +219,60 @@ impl FormulaBuilder {
     pub fn value(self) -> Formula {
         self.value
     }
+
+    // pub fn contrapositive(self, location: FileLocation) -> error::Result<FormulaBuilder> {
+    //     if let Formula::Implication(box lhs, box rhs) = self.value {
+    //         Ok(FormulaBuilder {
+    //             arg_types: self.arg_types,
+    //             value: Formula::Implication(Box::new(rhs.negate()), Box::new(lhs.negate())),
+    //             location: location,
+    //         })
+    //     } else {
+    //         Err(Error::new(NotImplicationContra, &location))
+    //     }
+    // }
+
+    pub fn modus_ponens(self, antecedent: FormulaBuilder) -> error::Result<FormulaBuilder> {
+        if let Formula::Implication(box lhs, box rhs) = self.value {
+            let mut assoc_sto: HashMap<usize, usize> = HashMap::new();
+            let mut assoc_ots: HashMap<usize, usize> = HashMap::new();
+            if Formula::matches(&lhs, &antecedent.value, &mut assoc_sto, &mut assoc_ots) {
+                Ok(FormulaBuilder {
+                    arg_types: self.arg_types,
+                    value: rhs,
+                    location: self.location,
+                })
+            } else {
+                Err(Error::new(ModusPonensMismatch, &self.location))
+            }
+        } else {
+            Err(Error::new(NotImplicationMP, &self.location))
+        }
+    }
+
+    pub fn instantiate(self, term: TermBuilder, globals: &Bindings) -> error::Result<FormulaBuilder> {
+        if let Formula::UniversalQ(var, itype, box form) = self.value {
+            if term.itype == itype {
+                Ok(FormulaBuilder {
+                    arg_types: self.arg_types,
+                    value: form.substitute(var, &term.value),
+                    location: term.location,
+                })
+            } else {
+                Err(Error::new(ITypeMismatch {
+                    found: term.itype.repr(globals),
+                    expected: itype.repr(globals),
+                }, &term.location))
+            }
+        } else {
+            Err(Error::new(NotUniversalQInst, &term.location))
+        }
+    }
 }
 
 
 pub struct FSchemaBuilder {
-    marg_types: Vec<MetaType>,
+    // marg_types: Vec<MetaType>,
     iarg_types: Vec<InternalType>,
     value: FormulaSchema,
     location: FileLocation,
@@ -232,7 +281,7 @@ pub struct FSchemaBuilder {
 impl FSchemaBuilder {
     pub fn formula(formula: FormulaBuilder) -> error::Result<FSchemaBuilder> {
         Ok(FSchemaBuilder {
-            marg_types: Vec::new(),
+            // marg_types: Vec::new(),
             iarg_types: formula.arg_types,
             value: FormulaSchema::Formula(formula.value),
             location: formula.location,
@@ -250,16 +299,30 @@ impl FSchemaBuilder {
         }
     }
 
-    pub fn schema(id: usize, mtype: MetaType, mut schema: FSchemaBuilder, locals: &mut LocalBindings, location: FileLocation) -> error::Result<FSchemaBuilder> {
+    pub fn schema(id: usize, mtype: MetaType, schema: FSchemaBuilder, locals: &mut LocalBindings, location: FileLocation) -> error::Result<FSchemaBuilder> {
         let local_id = locals.get_local(&id).unwrap();
         locals.remove(&local_id);
-        schema.marg_types.push(mtype.clone());
+        // schema.marg_types.push(mtype.clone());
         Ok(FSchemaBuilder {
-            marg_types: schema.marg_types,
+            // marg_types: schema.marg_types,
             iarg_types: schema.iarg_types,
             value: FormulaSchema::Schema(local_id, mtype, Box::new(schema.value)),
             location: location,
         })
+    }
+
+    pub fn saved_theorem(id: usize, globals: &Bindings, location: FileLocation) -> error::Result<FSchemaBuilder> {
+        if let Some(theorem) = globals.get_theorem(&id) {
+            Ok(FSchemaBuilder {
+                iarg_types: Vec::new(),
+                value: theorem.clone(),
+                location: location,
+            })
+        } else {
+            Err(Error::new(NoBinding {
+                name: globals.get_name(&id).unwrap().clone(),
+            }, &location))
+        }
     }
 
     pub fn is_wff_schema(&self) -> bool {
@@ -269,6 +332,26 @@ impl FSchemaBuilder {
     pub fn value(self) -> FormulaSchema {
         self.value
     }
+
+    // pub fn get_formula(self) -> error::Result<FormulaBuilder> {
+    //     if let FormulaSchema::Formula(form) = self.value {
+    //         Ok(FormulaBuilder {
+    //             arg_types: Vec::new(),
+    //             value: form,
+    //             location: self.location,
+    //         })
+    //     } else {
+            
+    //     }
+    // }
+
+    // pub fn specify(self, formula: FormulaBuilder) -> error::Result<FSchemaBuilder> {
+    //     if formula_sch.marg_types.len() == 0 {
+    //         if let FSchemaBuilder { value: FormulaSchema::Formula(formula), .. } = formula_sch {
+
+    //         }
+    //     }
+    // }
 }
 
 

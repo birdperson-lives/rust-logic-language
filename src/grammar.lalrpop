@@ -80,6 +80,41 @@ pub Statement: () = {
 };
 
 
+// pub ProofRules: error::Result<FormulaBuilder> = {
+//     <loc:Loc> "given" <typedec:ITypeDec> "." <form:ProofRules> => {
+//         let (var, itype) = typedec?;
+//         FormulaBuilder::universal_q(var, itype, form?, locals, loc)
+//     },
+//     <loc:Loc> "contrapositive" "." <form:ProofRules>           => form.contrapositive(loc),
+//     <form:ProofRulesModPon>                                    => form,
+// };
+
+// pub ProofRulesModPon: error::Result<FormulaBuilder> = {
+//     <lhs:ProofRulesModPon> "$" <rhs:ProofRulesSpec> => lhs?.modus_ponens(rhs?),
+//     <form:ProofRulesApp>                            => form,
+// };
+
+// pub ProofRulesApp: error::Result<FormulaBuilder> = {
+//     <quant:ProofRulesApp> <term:Term> => quant?.instantiate(term?, globals),
+//     <form:ProofRulesBase>             => form,
+// };
+
+// pub ProofRulesBase: error::Result<FormulaBuilder> = {
+//     "(" <form:ProofRules> ")" => form,
+//     <formsch:PRSchemaSpec>    => form?.get_formula(),
+// };
+
+// pub PRSchemaSpec: error::Result<FSchemaBuilder> = {
+//     <schema:PRSchemaSpec> <arg:PRSchemaSpecBase> => schema?.specify(arg?),
+//     <schema:PRSchemaSpecBase>                    => schema,
+// };
+
+// pub PRSchemaSpecBase: error::Result<FSchemaBuilder> = {
+//     "(" <schema:PRSchemaSpec> ")" => schema,
+//     <loc:Loc> <id:Ident>          => FSchemaBuilder::saved_theorem(id, globals, loc),
+// };
+
+
 pub FSchema: error::Result<FSchemaBuilder> = {
     <loc:Loc> "schema" <typedec:MTypeDecSchema> "." <sch:FSchema> => {
         let (var, mtype) = typedec?;

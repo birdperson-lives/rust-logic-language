@@ -36,7 +36,7 @@ fn main() {
                 // println!("parsing");
                 match grammar::parse_Program(&mut locals, &mut globals, &source_info, &stdout, &file_text) {
                     Ok(_)  => println!("ran"),
-                    Err(err) => println!("{}", err),
+                    Err(err) => println!("{:?}", err),
                 }
                 // println!("parsed");
             },
