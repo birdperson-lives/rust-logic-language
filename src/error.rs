@@ -85,6 +85,10 @@ pub enum ErrorKind {
     },
     UnboundImplication,
     UnboundTheorem,
+    NotImplicationContra,
+    NotImplicationMP,
+    ModusPonensMismatch,
+    NotUniversalQInst,
 }
 
 use self::ErrorKind::*;
@@ -109,15 +113,19 @@ impl Error {
 
     fn err_type(&self) -> &'static str {
         match self.error {
-            FileOpenFailure{..} => "FileOpenFailure"   ,
-            FileReadFailure{..} => "FileReadFailure"   ,
-            UnexpectedToken{..} => "UnexpectedToken"   ,
-            NoBinding{..}       => "NoBinding"         ,
-            BindingExists{..}   => "BindingExists"     ,
-            ITypeMismatch{..}   => "ITypeMismatch"     ,
-            MTypeMismatch{..}   => "MTypeMismatch"     ,
-            UnboundImplication  => "UnboundImplication",
-            UnboundTheorem      => "UnboundTheorem"    ,
+            FileOpenFailure{..}  => "FileOpenFailure"     ,
+            FileReadFailure{..}  => "FileReadFailure"     ,
+            UnexpectedToken{..}  => "UnexpectedToken"     ,
+            NoBinding{..}        => "NoBinding"           ,
+            BindingExists{..}    => "BindingExists"       ,
+            ITypeMismatch{..}    => "ITypeMismatch"       ,
+            MTypeMismatch{..}    => "MTypeMismatch"       ,
+            UnboundImplication   => "UnboundImplication"  ,
+            UnboundTheorem       => "UnboundTheorem"      ,
+            NotImplicationContra => "NotImplicationContra",
+            NotImplicationMP     => "NotImplicationMP"    ,
+            ModusPonensMismatch  => "ModusPonensMismatch" ,
+            NotUniversalQInst    => "NotUniversalQInst"   ,
         }
     }
 
@@ -153,8 +161,12 @@ impl Error {
                 ref found,
                 ref expected,
             } => format!("found metalogical type `{}`, expected metalogical type `{}`", found, expected),
-            UnboundImplication => String::from("implication between non-nullary formulae"),
-            UnboundTheorem     => String::from("axiom/theorem accepts logical arguments"),
+            UnboundImplication   => String::from("implication between non-nullary formulae"),
+            UnboundTheorem       => String::from("axiom/theorem accepts logical arguments"),
+            NotImplicationContra => String::from("cannot take contrapositive because formula is not an implication"),
+            NotImplicationMP     => String::from("cannot apply modus ponens to non-implication"),
+            ModusPonensMismatch  => String::from("cannot apply modus ponens because the antecedent does not match the hypothesis"),
+            NotUniversalQInst    => String::from("cannot instantiate because the formula is not a universal quantification"),
         }
     }
 
